@@ -30,7 +30,8 @@ async function authenticateWithBiometrics() {
     } catch (error) {
         failedAttempts++;
         if (failedAttempts >= 3) {
-            stayLocked();
+            failedAttempts = 0;
+            showPINFlow();
         }
         return false;
     }
@@ -135,12 +136,12 @@ async function handleSetup() {
 async function unlock() {
     const biometricEnabled = await getBiometricEnabled();
     if (!biometricEnabled) {
-        ShowPINflow();
+        showPINFlow();
         return false;
     }
     const supported = await checkHardwareSupport();
     if (!supported) {
-        ShowPINflow();
+        showPINFlow();
         return false;
     }
     return await authenticateWithBiometrics();
