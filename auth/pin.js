@@ -1,26 +1,28 @@
-const { subtle } = require('node:crypto').webcrypto;
 
-(async function () {
-    const key = await subtle.generateKey(
-        {
-            name: 'PBKDF2',
-            length: 256,
-            hash: 'SHA-256',
-        },
-        true,
-        ['sign','verify','deriveKey']
-    );
+async function hashPIN(pin) {
+    const encoded = new TextEncoder().encode(pin);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoded);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
 
-const enco = new TextEncoder();
-const Message = enco.encode('DONE');
+async function verifyPIN(inputPin) {
+    const storedHash = await getStoredPINHash();
+    const inputHash = await hashPIN(inputPin);
+    return storedHash === inputHash;
+}
 
-const degist = await subtle.sign(
-    {
-        name: 'PBKDF2',
-        length: 256,},
-        key,
-        Message
-    );
+async function getStoredPINHash() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get("pinHash", (result) => {
+            resolve(result.pinHash || null);
+        });
+    });
+}
 
-})();
-
+async function setPIN(pin) {
+    const pinHash = await hashPIN(pin);
+    chrome.storage.local.set({ pinHash });
+    console.log("PIN hash stored");
+}

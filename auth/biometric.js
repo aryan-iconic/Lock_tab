@@ -53,8 +53,8 @@ async function registerCredential() {
 
             user: {
                 id: crypto.getRandomValues(new Uint8Array(16)),
-                name: [],
-                displayName: [],
+                name: "user",
+                displayName: "User",
             },
 
             pubKeyCredParams: [
@@ -73,47 +73,94 @@ async function registerCredential() {
 
         if (credential) {
             storedCredentialId = credential.rawId;
-
-            chrome.storage.local.set(
-                "credId",
-                bufferToBase64(credential.rawId)
-            );
-
+            await saveCredential(credential.rawId);
             console.log("Credential created & stored");
+            return true;
         }
+        return false;
 
     } catch (error) {
         console.error("Registration failed:", error);
+        return false;
     }
 }
 
 function bufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+function base64ToBuffer(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
     }
-    return btoa(binary);
+    return bytes.buffer;
+}
+
+function saveCredential(buffer) {
+    return new Promise((resolve) => {
+        chrome.storage.local.set(
+            { credId: bufferToBase64(buffer) },
+            resolve
+        );
+    });
 }
 
 function loadCredential() {
-    const saved = chrome.storage.local.get("credId");
-    if (!saved) return null;
-
-    const binary = Uint8Array.from(atob(saved), c => c.charCodeAt(0));
-    return binary.buffer;
+    return new Promise((resolve) => {
+        chrome.storage.local.get(["credId"], (result) => {
+            if (!result.credId) return resolve(null);
+            resolve(base64ToBuffer(result.credId));
+        });
+    });
 }
 
-let storedCredentialId = loadCredential();
+async function checkHardwareSupport() {
+    if (!window.PublicKeyCredential) return false;
+    return await PublicKeyCredential
+        .isUserVerifyingPlatformAuthenticatorAvailable();
+}
+
+async function handlesetup() {
+    const supported = await checkHardwareSupport();
+    if(!supported) {
+        return {supported: false};
+    }
+    return {supported: true};
+}
+async function unclock() {
+    const biometricEnabled = await getBiometricEnabled();
+    if (!biometricEnabled) {
+        ShowPINflow();
+        return false;
+    }
+    const supported = await checkHardwareSupport();
+    if (!supported) {
+        ShowPINflow();
+        return false;
+    }
+    return await authenticateWithBiometrics();
+}
+
+async function initializeCredential() {
+    storedCredentialId = await loadCredential();
+}
 
 async function main() {
+    await initializeCredential();
+    
     if (!storedCredentialId) {
-        await registerCredential();
+        const registered = await registerCredential();
+        if (!registered) {
+            console.error("Failed to register credential");
+            return false;
+        }
     }
 
     const isAuthenticated = await authenticateWithBiometrics();
-
     console.log(isAuthenticated ? "Success" : "Failed");
+    return isAuthenticated;
 }
 
 main();
