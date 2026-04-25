@@ -1,3 +1,4 @@
+let failedAttempts = 0;
 async function authenticateWithBiometrics() {
     if (!window.PublicKeyCredential || !storedCredentialId) {
         console.error("WebAuthn not supported or no credential.");
@@ -27,8 +28,10 @@ async function authenticateWithBiometrics() {
         return true;
 
     } catch (error) {
-        console.error("Auth failed:", error);
-        stayLocked();
+        failedAttempts++;
+        if (failedAttempts >= 3) {
+            stayLocked();
+        }
         return false;
     }
 }
@@ -122,14 +125,14 @@ async function checkHardwareSupport() {
         .isUserVerifyingPlatformAuthenticatorAvailable();
 }
 
-async function handlesetup() {
+async function handleSetup() {
     const supported = await checkHardwareSupport();
     if(!supported) {
         return {supported: false};
     }
     return {supported: true};
 }
-async function unclock() {
+async function unlock() {
     const biometricEnabled = await getBiometricEnabled();
     if (!biometricEnabled) {
         ShowPINflow();
@@ -143,24 +146,32 @@ async function unclock() {
     return await authenticateWithBiometrics();
 }
 
+async function getBiometricEnabled() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get("biometricEnabled", (result) => {
+            resolve(result.biometricEnabled || false);
+        });
+    });
+}
+
 async function initializeCredential() {
     storedCredentialId = await loadCredential();
 }
 
-async function main() {
-    await initializeCredential();
+// async function main() {
+//         await initializeCredential();
+        
+//         if (!storedCredentialId) {
+//             const registered = await registerCredential();
+//             if (!registered) {
+//                 console.error("Failed to register credential");
+//                 return false;
+//             }
+//         }
+
+//         const isAuthenticated = await authenticateWithBiometrics();
+//         console.log(isAuthenticated ? "Success" : "Failed");
+//         return isAuthenticated;
+//     }
     
-    if (!storedCredentialId) {
-        const registered = await registerCredential();
-        if (!registered) {
-            console.error("Failed to register credential");
-            return false;
-        }
-    }
-
-    const isAuthenticated = await authenticateWithBiometrics();
-    console.log(isAuthenticated ? "Success" : "Failed");
-    return isAuthenticated;
-}
-
-main();
+// main();
